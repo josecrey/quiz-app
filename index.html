@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
+import ReactDOM from 'react-dom';
 import mammoth from 'mammoth';
 
-export default function QuizApp() {
+function QuizApp() {
   const [pool, setPool] = useState([]);
   const [wrongPool, setWrongPool] = useState([]);
   const [idx, setIdx] = useState(0);
@@ -13,8 +14,8 @@ export default function QuizApp() {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const buffer = await file.arrayBuffer();
-      const { value: text } = await mammoth.extractRawText({ arrayBuffer: buffer });
+      const arrayBuffer = await file.arrayBuffer();
+      const { value: text } = await mammoth.extractRawText({ arrayBuffer });
       const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
       const qs = [];
       let i = 0;
@@ -43,7 +44,9 @@ export default function QuizApp() {
         alert('No se encontraron preguntas. Marca la correcta con [TRUE].');
         return;
       }
-      setPool(shuffle(qs)); setWrongPool([]); setIdx(0);
+      setPool(shuffle(qs));
+      setWrongPool([]);
+      setIdx(0);
       setStats({ correct: 0, total: 0 });
       setFeedback({ show: false, isCorrect: false, correctLabel: '' });
       setShowSummary(false);
@@ -77,8 +80,12 @@ export default function QuizApp() {
     const nextIdx = idx + 1;
     if (nextIdx < pool.length) setIdx(nextIdx);
     else if (wrongPool.length) {
-      setPool(shuffle(wrongPool)); setWrongPool([]); setIdx(0);
-    } else setShowSummary(true);
+      setPool(shuffle(wrongPool));
+      setWrongPool([]);
+      setIdx(0);
+    } else {
+      setShowSummary(true);
+    }
   };
 
   const colors = ['#FFEB3B', '#F44336', '#2196F3', '#4CAF50'];
@@ -124,3 +131,8 @@ export default function QuizApp() {
     </div>
   );
 }
+
+// Montaje de la aplicación en el DOM
+ReactDOM.render(<QuizApp />, document.getElementById('root'));
+
+export default QuizApp;
