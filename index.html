@@ -1,148 +1,84 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Quiz App</title>
-  <!-- React y ReactDOM desde CDN -->
-  <script src="https://unpkg.com/react/umd/react.development.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom/umd/react-dom.development.js" crossorigin></script>
-  <!-- Mammoth para procesar .docx en el navegador -->
   <script src="https://unpkg.com/mammoth@1.4.21/dist/mammoth.browser.min.js"></script>
-  <!-- Babel para transpilar JSX al vuelo -->
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .option { padding: 8px; margin: 4px 0; cursor: pointer; color: #000; }
+    .correct { background-color: #4CAF50; }
+    .incorrect { background-color: #F44336; }
+    .option0 { background-color: #FFEB3B; }
+    .option1 { background-color: #F44336; }
+    .option2 { background-color: #2196F3; color: #fff; }
+    .option3 { background-color: #4CAF50; color: #fff; }
+    #nextBtn { margin-top: 12px; padding: 10px 20px; background: #2196F3; color: #fff; border: none; cursor: pointer; }
+  </style>
 </head>
 <body>
-  <div id="root"></div>
+  <h1>Quiz App</h1>
+  <div id="content">
+    <p>Sube tu archivo <strong>.docx</strong> con <em>[TRUE]</em> marcando la respuesta correcta.</p>
+    <input type="file" id="fileInput" accept=".docx">
+  </div>
 
-  <script type="text/babel" data-plugins="transform-react-jsx" data-presets="react">
-    const { useState } = React;
+  <script>
+    let pool = [], wrongPool = [], idx = 0, stats = { correct: 0, total: 0 };
+    const content = document.getElementById('content');
+    document.getElementById('fileInput').addEventListener('change', handleFile);
 
-    function App() {
-      const [pool, setPool] = useState([]);
-      const [wrongPool, setWrongPool] = useState([]);
-      const [idx, setIdx] = useState(0);
-      const [stats, setStats] = useState({ correct: 0, total: 0 });
-      const [feedback, setFeedback] = useState({ show: false, isCorrect: false, correctLabel: '' });
-      const [showSummary, setShowSummary] = useState(false);
-
-      const handleFile = async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        try {
-          const arrayBuffer = await file.arrayBuffer();
-          const { value: text } = await mammoth.extractRawText({ arrayBuffer });
-          const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-          const qs = [];
-          let i = 0;
-          while (i < lines.length) {
-            const line = lines[i];
-            if ((line.endsWith('?') || line.endsWith(':')) && !/^[A-D]\./.test(line)) {
-              const question = line.replace(/[:?]$/, '').trim();
-              i++;
-              if (/^Seleccione/i.test(lines[i])) i++;
-              const options = [];
-              const optRegex = /^([A-D])\.\s*(.*)$/;
-              while (i < lines.length && optRegex.test(lines[i])) {
-                const m = lines[i].match(optRegex);
-                let optText = m[2];
-                const correct = /\[TRUE\]/.test(optText);
-                optText = optText.replace(/\[TRUE\]/g, '').trim();
-                options.push({ letter: m[1], label: optText, correct });
-                i++;
-              }
-              if (options.length === 4) qs.push({ question, options });
-            } else {
-              i++;
-            }
+    async function handleFile(e) {
+      const file = e.target.files[0];
+      const { value: text } = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+      const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+      let qs = [], i=0;
+      while(i<lines.length) {
+        let line = lines[i];
+        if ((line.endsWith('?')||line.endsWith(':')) && !/^[A-D]\./.test(line)) {
+          let q = line.replace(/[:?]$/,'').trim(); i++;
+          if (/^Seleccione/i.test(lines[i])) i++;
+          let opts = [], o;
+          const re = /^([A-D])\.\s*(.*)$/;
+          while(i<lines.length && re.test(lines[i])){
+            let m = lines[i].match(re);
+            let correct = /\[TRUE\]/.test(m[2]);
+            let label = m[2].replace(/\[TRUE\]/,'').trim();
+            opts.push({ letter: m[1], label, correct }); i++;
           }
-          if (!qs.length) {
-            alert('No se encontraron preguntas. Marca la correcta con [TRUE].');
-            return;
-          }
-          setPool(qs.sort(() => Math.random() - 0.5));
-          setWrongPool([]);
-          setIdx(0);
-          setStats({ correct: 0, total: 0 });
-          setFeedback({ show: false, isCorrect: false, correctLabel: '' });
-          setShowSummary(false);
-        } catch (err) {
-          console.error(err);
-          alert('Error al procesar .docx.');
-        }
-      };
-
-      const answer = (letter) => {
-        const cur = pool[idx];
-        if (!cur) return;
-        const correctOpt = cur.options.find(o => o.correct);
-        const sel = cur.options.find(o => o.letter === letter);
-        const isCorrect = sel?.correct || false;
-        setFeedback({ show: true, isCorrect, correctLabel: `${correctOpt.letter}. ${correctOpt.label}` });
-        setStats(s => ({ correct: s.correct + (isCorrect ? 1 : 0), total: s.total + 1 }));
-        if (!isCorrect) setWrongPool(w => [...w, cur]);
-      };
-
-      const next = () => {
-        setFeedback({ show: false, isCorrect: false, correctLabel: '' });
-        const nextIdx = idx + 1;
-        if (nextIdx < pool.length) setIdx(nextIdx);
-        else if (wrongPool.length) {
-          setPool(wrongPool.sort(() => Math.random() - 0.5));
-          setWrongPool([]);
-          setIdx(0);
-        } else setShowSummary(true);
-      };
-
-      const colors = ['#FFEB3B', '#F44336', '#2196F3', '#4CAF50'];
-
-      if (!pool.length) {
-        return (
-          <div style={{ padding: 20 }}>
-            <h1>Quiz App</h1>
-            <p>Sube tu archivo <strong>.docx</strong> con <em>[TRUE]</em> marcando la opción correcta.</p>
-            <input type="file" accept=".docx" onChange={handleFile} />
-          </div>
-        );
+          if(opts.length===4) qs.push({question:q, options:opts});
+        } else i++;
       }
-
-      if (feedback.show) {
-        const cur = pool[idx];
-        return (
-          <div style={{ padding: 20 }}>
-            <strong>{cur.question}</strong>
-            {cur.options.map((o, i) => (
-              <div key={i} style={{ backgroundColor: colors[i], padding: '8px', margin: '4px 0' }}>{`${o.letter}. ${o.label}`}</div>
-            ))}
-            {feedback.isCorrect ? <p>¡Correcto!</p> : <><p>Incorrecto.</p><p>Respuesta correcta: <strong>{feedback.correctLabel}</strong></p></>}
-            <button onClick={next} style={{ backgroundColor: '#2196F3', color: 'white', fontWeight: 'bold', fontSize: '18px', padding: '10px 20px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Siguiente →</button>
-          </div>
-        );
-      }
-
-      if (showSummary) {
-        return (
-          <div style={{ padding: 20 }}>
-            <h2>¡Felicidades!</h2>
-            <p>Correctas: {stats.correct} de {stats.total}</p>
-            <button onClick={() => window.location.reload()}>Reiniciar</button>
-          </div>
-        );
-      }
-
-      return (
-        <div style={{ padding: 20 }}>
-          <strong>Pregunta {idx + 1} de {pool.length}</strong>
-          <p style={{ fontWeight: 'bold' }}>{pool[idx].question}</p>
-          {pool[idx].options.map((o, i) => (
-            <button key={i} onClick={() => answer(o.letter)} style={{ display: 'block', margin: '8px 0', backgroundColor: colors[i], border: 'none', padding: '8px', textAlign: 'left', cursor: 'pointer' }}>{`${o.letter}. ${o.label}`}</button>
-          ))}
-          <p>Correctas: {stats.correct} | Erróneas: {stats.total - stats.correct}</p>
-        </div>
-      );
+      pool = qs.sort(()=>Math.random()-0.5);
+      wrongPool=[]; idx=0; stats={correct:0,total:0};
+      showQuestion();
     }
 
-    ReactDOM.render(<App />, document.getElementById('root'));
+    function showQuestion() {
+      content.innerHTML = '';
+      if(idx>=pool.length) {
+        if(wrongPool.length) { pool = wrongPool.sort(()=>Math.random()-0.5); wrongPool=[]; idx=0; showQuestion(); return; }
+        content.innerHTML = `<h2>¡Felicidades!</h2><p>Correctas: ${stats.correct} de ${stats.total}</p><button onclick="location.reload()">Reiniciar</button>`;
+        return;
+      }
+      let cur = pool[idx]; stats.total++;
+      let html = `<h2>Pregunta ${idx+1} de ${pool.length}</h2><p><strong>${cur.question}</strong></p>`;
+      cur.options.forEach((o,i)=>{
+        html+= `<div class="option option${i}" id="opt${i}">${o.letter}. ${o.label}</div>`;
+      });
+      html+= `<p>Correctas: ${stats.correct} | Erróneas: ${stats.total-stats.correct}</p>`;
+      content.innerHTML = html;
+      cur.options.forEach((o,i)=>{
+        document.getElementById('opt'+i).onclick = ()=>{
+          if(o.correct) { stats.correct++; document.getElementById('opt'+i).classList.add('correct'); }
+          else { wrongPool.push(cur); document.getElementById('opt'+i).classList.add('incorrect'); document.querySelector('.option'+cur.options.findIndex(x=>x.correct)).classList.add('correct'); }
+          document.querySelectorAll('.option').forEach(el=>el.onclick=null);
+          let btn = document.createElement('button'); btn.id='nextBtn'; btn.textContent='Siguiente →'; btn.onclick=()=>{ idx++; showQuestion(); };
+          content.appendChild(btn);
+        };
+      });
+    }
   </script>
 </body>
 </html>
